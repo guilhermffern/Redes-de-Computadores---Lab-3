@@ -6,7 +6,7 @@
 #include <termios.h>
 #include <stdio.h>
 
-#define BAUDRATE B38400
+#define BAUDRATE B9600
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
 #define TRUE 1
@@ -64,23 +64,82 @@ int main(int argc, char** argv)
         perror("tcsetattr");
         exit(-1);
     }
+    int i = 0;
+    char helper;
+    printf("Press enter when sent\n");
+    while(helper !='\n')
+    {    
+    scanf("%c",&helper);
+    }
 
     printf("New termios structure set\n");
 
-    while (STOP==FALSE) {       /* loop for input */
-        res = read(fd,buf,1);   /* returns after 5 chars have been input */
-        buf[res]=0;               /* so we can printf... */
+    while(STOP==FALSE){    
+    res = read(fd,buf+i,1);   
+    //buf[res]=0;               
         printf(":%s:%d\n", buf, res);
-        if (buf[0]=='\n') STOP=TRUE;
+        printf("%d\n",i);
+
+    if (res>0){ 
+       if(buf[i] == (char*)0x5c)
+        i++;
+       if(buf[i] == (char*)0x01)
+        i++;
+       if(buf[i] == (char*)0x03)
+        i++;
+       if(buf[i] == (char*)0x02)
+        i++;
+       if(buf[i] == (char*)0x5c)
+        i++;
     }
+    else if(i < 5 && res<1)
+    STOP=TRUE;  
 
+    if(i==5)
+    printf("trama set recebida\n");
 
+    if(i>=5&& i <=10){
+        if(i==5){    
+        buf[i] = (char*)0x5c;
+        i++;
+        }
+        if(i==6){    
+        buf[i] = (char*)0x01;
+        i++;
+        }
+        if(i==7){    
+        buf[i] = (char*)0x07;
+        i++;
+        }
+        if(i==8){    
+        buf[i] = (char*)0x06;
+        i++;
+        }
+        if(i==9){    
+        buf[i] = (char*)0x5c;
+        i++;
+        }
+    }
+    if(i == 10){
+    res = write(fd,buf+i,5);
+    printf("%s\n",buf);
+    printf("trama UA enviada\n");
+    STOP = TRUE;
+ }
+}
+    /*for(int i= 5; i<255; i++){
+    rs = read(fd,buf,1);
+    buf[res]=0;
+    printf(":%s:%d\n", buf, res);    
+    if(buf[0]=='z') break;
+    }*/
 
     /*
     O ciclo WHILE deve ser alterado de modo a respeitar o indicado no guião
     */
-
+    sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);
     return 0;
 }
+

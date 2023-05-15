@@ -6,7 +6,7 @@
 #include <termios.h>
 #include <stdio.h>
 
-#define BAUDRATE B38400
+#define BAUDRATE B9600
 #define MODEMDEVICE "/dev/ttyS0"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
@@ -24,7 +24,7 @@ int main(int argc, char** argv)
     if ( (argc < 2) ||
          ((strcmp("/dev/ttyS0", argv[1])!=0) &&
           (strcmp("/dev/ttyS1", argv[1])!=0) )) {
-        printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
+        printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS0\n");
         exit(1);
     }
 
@@ -72,16 +72,19 @@ int main(int argc, char** argv)
     printf("New termios structure set\n");
 
 
-
-    for (i = 0; i < 255; i++) {
-        buf[i] = 'a';
-    }
-
-    /*testing*/
-    buf[25] = '\n';
-
-    res = write(fd,buf,255);
+    buf[0] = '0x5c';
+    buf[1] = '0x01';
+    buf[2] = '0x03';
+    buf[3] = '0x02';
+    buf[4] = '0x5c';
+    res = 5;
+ 
+    res = write(fd,buf,5);
+    printf("%s\n",buf);
     printf("%d bytes written\n", res);
+    
+    
+
 
 
     /*
