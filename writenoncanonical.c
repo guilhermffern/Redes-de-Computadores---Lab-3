@@ -6,24 +6,28 @@
 #include <termios.h>
 #include <stdio.h>
 
-#define BAUDRATE B9600
+#define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS0"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
 #define TRUE 1
 
 volatile int STOP=FALSE;
+int timeout_seconds = 5;
+int timeout_microseconds = 1000000;
 
 int main(int argc, char** argv)
 {
     int fd,c, res;
     struct termios oldtio,newtio;
-    char buf[255];
+    unsigned char buf[255];
     int i, sum = 0, speed = 0;
 
     if ( (argc < 2) ||
          ((strcmp("/dev/ttyS0", argv[1])!=0) &&
-          (strcmp("/dev/ttyS1", argv[1])!=0) )) {
+          (strcmp("/dev/ttyS1", argv[1])!=0) &&
+          (strcmp("/dev/ttyS10", argv[1])!=0) &&
+          (strcmp("/dev/ttyS11", argv[1])!=0) )) {
         printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS0\n");
         exit(1);
     }
@@ -71,19 +75,76 @@ int main(int argc, char** argv)
 
     printf("New termios structure set\n");
 
-
-    buf[0] = '0x5c';
-    buf[1] = '0x01';
-    buf[2] = '0x03';
-    buf[3] = '0x02';
-    buf[4] = '0x5c';
+    buf[0] = 0x5c;
+    buf[1] = 0x01;
+    buf[2] = 0x03;
+    buf[3] = 0x02;
+    buf[4] = 0x5c;
     res = 5;
  
     res = write(fd,buf,5);
-    printf("%s\n",buf);
+    //printf("%s\n",buf);
     printf("%d bytes written\n", res);
+    printf("----------------Trama SET enviada----------------\n");
+            printf("Waiting for data...\n");
+
+    // Wait for data or timeout
+    while (STOP == FALSE && timeout_seconds > 0)
+    {
+        res = read(fd, buf + i, 1);
     
+        if (res > 0)
+        {
+            // Data received
+            // Process the received data as needed
+            STOP=TRUE;
+        }
+        else if (res == 0)
+        {
+            // No data received, wait for a specified duration
+            usleep(timeout_microseconds);
+            timeout_seconds--;
+        }
+        else
+        {
+            // Error occurred while reading data
+            perror("read");
+            break;
+        }
+    }
+    STOP = FALSE;
+    i=6;
+    while(STOP==FALSE){    
+    res = read(fd,buf+i,1);   
+    //buf[res]=0;               
+        //printf(":%c:%d\n", buf[i], res);
+        //printf(":%s\n", buf);
+       // printf("%d\n",i);
+
+    if (res>0){ 
+       if(buf[i] == 0x5c)
+        i++;
+       if(buf[i] == 0x01)
+        i++;
+       if(buf[i] == 0x06)
+        i++;
+       if(buf[i] == 0x06)
+        i++;
+       if(buf[i] == 0x5c)
+        i++;
+    }
     
+    else if(i < 10 && res<1)
+    STOP=TRUE;  
+
+    if(i==10)
+    {
+        printf("----------------Trama UA recebida----------------\n");
+        STOP = TRUE;
+    }
+    }
+
+
 
 
 
