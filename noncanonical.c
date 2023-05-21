@@ -126,7 +126,7 @@ int main(int argc, char** argv)
         i++;
        else if(buf[i] == 0x01)
         i++;
-       else if(buf[i] == 0x04)
+       else if(buf[i] == 0x03)
         i++;
        else if(buf[i] == 0x02)
         i++;
@@ -247,4 +247,3 @@ int main(int argc, char** argv)
     close(fd);
     return 0;
 }
-

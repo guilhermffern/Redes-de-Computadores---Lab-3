@@ -25,7 +25,7 @@
 #define C_I0     0x00
 #define C_I1     0xB0
 #define C_DISC   0x0B
-int typeI=1;
+int typeI=0;
 int RR;
 volatile int STOP=FALSE;
 volatile int TIMERVAR=FALSE;
@@ -106,8 +106,10 @@ int main(int argc, char** argv)
 
     // Wait for data or timeout
     i=5;
+    //usleep(2*timeout_microseconds);
     while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
+        //usleep(timeout_microseconds);
         res = read(fd, buf + i, 1);
     
         if (res > 0)
@@ -119,10 +121,11 @@ int main(int argc, char** argv)
         else if (res == 0)
         {
             // No data received, wait for a specified duration
+            if(timeout_seconds == 1)
             {
             buf[0] = 0x5c;
             buf[1] = 0x01;
-            buf[2] = 0x04;
+            buf[2] = 0x03;
             buf[3] = 0x02;
             buf[4] = 0x5c;
             res = 5;
@@ -130,7 +133,7 @@ int main(int argc, char** argv)
             res = write(fd,buf,5);
             printf("----------------Trama SET reenviada----------------\n");
             usleep(timeout_microseconds);
-            //timeout_seconds--;
+            timeout_seconds=5;
             }
                     usleep(timeout_microseconds);
                     timeout_seconds--;
