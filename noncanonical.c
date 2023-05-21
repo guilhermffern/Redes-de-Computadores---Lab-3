@@ -11,7 +11,21 @@
 #define FALSE 0
 #define TRUE 1
 
+#define F        0x7E
+#define ESC      0x7D
+#define A        0x03
+#define A_DISC   0x01
+#define C_SET    0x03
+#define C_UA     0x07
+#define C_RR0    0x05
+#define C_RR1    0xB5
+#define C_REJ0   0x01
+#define C_REJ1   0x81
+#define C_I0     0x00
+#define C_I1     0xB0
+#define C_DISC   0x0B
 volatile int STOP=FALSE;
+volatile int TIMERVAR = FALSE;
 
 int main(int argc, char** argv)
 {
@@ -74,7 +88,7 @@ int main(int argc, char** argv)
     printf("Waiting for data...\n");
     
     // Wait for data or timeout
-    while (STOP == FALSE && timeout_seconds > 0)
+    while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
         res = read(fd, buf + i, 1);
 
@@ -82,7 +96,7 @@ int main(int argc, char** argv)
         {
             // Data received
             // Process the received data as needed
-            STOP=TRUE;
+            TIMERVAR=TRUE;
         }
         else if (res == 0)
         {
@@ -97,30 +111,31 @@ int main(int argc, char** argv)
             break;
         }
     }
-    STOP=FALSE;
+    TIMERVAR=FALSE;
     printf("New termios structure set\n");
 
-    while(STOP==FALSE){   
-    if(i>0) 
-    res = read(fd,buf+i,1);   
+    while(STOP==FALSE){ 
     //buf[res]=0;               
        // printf(":%s:%d\n", buf, res);
-       // printf("%d\n",i);
-
+        //printf("%d\n",i);
+    if(i<5){
+        if(i>0) 
+        res = read(fd,buf+i,1);   
     if (res>0){ 
        if(buf[i] == 0x5c)
         i++;
-       if(buf[i] == 0x01)
+       else if(buf[i] == 0x01)
         i++;
-       if(buf[i] == 0x03)
+       else if(buf[i] == 0x03)
         i++;
-       if(buf[i] == 0x02)
+       else if(buf[i] == 0x02)
         i++;
-       if(buf[i] == 0x5c)
+       else if(buf[i] == 0x5c)
         i++;
     }
-    else if(i < 5 && res<1)
+    else if(res<1)
     STOP=TRUE;  
+    }
 
     if(i==5){
     printf("----------------Trama SET recebida----------------\n");
@@ -129,7 +144,7 @@ int main(int argc, char** argv)
 
         buf[6] = 0x01;
  
-        buf[7] = 0x06;
+        buf[7] = 0x07;
    
         buf[8] = 0x06;
    
@@ -137,16 +152,72 @@ int main(int argc, char** argv)
     res = write(fd,buf+i,5);
    // printf("%s\n",buf);
     printf("----------------Trama UA enviada------------------\n");
-    i++;
-    STOP = TRUE;
+    i=10;
+    //STOP = TRUE;
     }
+    // printf(":%s\n", buf); 
+    if(i==10) 
+    printf("Waiting for data...\n");
+    while (TIMERVAR== FALSE && timeout_seconds > 0 && i==10)
+    {
+        res = read(fd, buf + i, 1);
+
+        if (res > 0)
+        {
+            // Data received
+            // Process the received data as needed
+            TIMERVAR=TRUE;
+        }
+        else if (res == 0)
+        {
+            // No data received, wait for a specified duration
+            usleep(timeout_microseconds);
+            timeout_seconds--;
+        }
+        else
+        {
+            // Error occurred while reading data
+            perror("read");
+            break;
+        }
+    }
+    TIMERVAR=FALSE;
+
+    if(i>9 && i<14){
+        if(i>10) 
+        res = read(fd,buf+i,1);
+    if (res>0){ 
+       // printf("%d\n",res);
+       if(buf[i] == F)
+        i++;
+ 
+       else if(buf[i] == A)
+        i++;
+
+       else if(buf[i] == C_I0)
+        i++;
+
+       else if(buf[i] == C_SET^A)
+        i++;
+
+    }
+    else
+    STOP=TRUE;  
+    }
+    if(i>=14){
+        printf("----------------Trama I detetada------------------\n");
+        buf[14] = F;
+        buf[15] = A;
+        buf[16] = C_RR0;
+        //buf[16] = C_RR1;
+        buf[17] = C_SET^A;
+        buf[18] = F;
+        res = write(fd,buf+i,5);//Usar variavel global que incrementa com os dados enviados para dizer o nº de carateres que irao ser escritos
+        printf("----------------Trama RR enviada----------------\n");
+        STOP=TRUE;
+    }
+
 }
-    /*for(int i= 5; i<255; i++){
-    rs = read(fd,buf,1);
-    buf[res]=0;
-    printf(":%s:%d\n", buf, res);    
-    if(buf[0]=='z') break;
-    }*/
 
     /*
     O ciclo WHILE deve ser alterado de modo a respeitar o indicado no guião

@@ -12,7 +12,22 @@
 #define FALSE 0
 #define TRUE 1
 
+#define F        0x7E
+#define ESC      0x7D
+#define A        0x03
+#define A_DISC   0x01
+#define C_SET    0x03
+#define C_UA     0x07
+#define C_RR0    0x05
+#define C_RR1    0xB5
+#define C_REJ0   0x01
+#define C_REJ1   0x81
+#define C_I0     0x00
+#define C_I1     0xB0
+#define C_DISC   0x0B
+
 volatile int STOP=FALSE;
+volatile int TIMERVAR=FALSE;
 int timeout_seconds = 5;
 int timeout_microseconds = 1000000;
 
@@ -89,7 +104,8 @@ int main(int argc, char** argv)
             printf("Waiting for data...\n");
 
     // Wait for data or timeout
-    while (STOP == FALSE && timeout_seconds > 0)
+    i=5;
+    while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
         res = read(fd, buf + i, 1);
     
@@ -97,7 +113,7 @@ int main(int argc, char** argv)
         {
             // Data received
             // Process the received data as needed
-            STOP=TRUE;
+            TIMERVAR=TRUE;
         }
         else if (res == 0)
         {
@@ -112,37 +128,106 @@ int main(int argc, char** argv)
             break;
         }
     }
-    STOP = FALSE;
-    i=6;
+    TIMERVAR = FALSE;
     while(STOP==FALSE){    
-    res = read(fd,buf+i,1);   
-    //buf[res]=0;               
-        //printf(":%c:%d\n", buf[i], res);
-        //printf(":%s\n", buf);
-       // printf("%d\n",i);
+    if(i>4 && i<11){
+        if(i>5) 
+        res = read(fd,buf+i,1);
+    if (res>0){
+       if(buf[i] == 0x5C)
+        i++;
+ 
+       else if(buf[i] == 0x01)
+        i++;
 
-    if (res>0){ 
-       if(buf[i] == 0x5c)
+       else if(buf[i] == 0x07)
         i++;
-       if(buf[i] == 0x01)
+
+       else if(buf[i] == 0x06)
         i++;
-       if(buf[i] == 0x06)
+       else if (buf[i]==0x5c)
         i++;
-       if(buf[i] == 0x06)
-        i++;
-       if(buf[i] == 0x5c)
-        i++;
+        else
+            STOP = TRUE;
     }
-    
-    else if(i < 10 && res<1)
+    else
     STOP=TRUE;  
-
-    if(i==10)
+    }
+   if(i==10)
     {
         printf("----------------Trama UA recebida----------------\n");
-        STOP = TRUE;
+        //printf(":%s\n", buf);
+        buf[10] = F;
+        buf[11] = A;
+        buf[12] = C_I0;
+        //buf[12] = C_I1;
+        buf[13] = C_SET^A;
+        //NOW ITS DATA//
+        res = write(fd,buf+i,4);//Usar variavel global que incrementa com os dados enviados para dizer o nº de carateres que irao ser escritos
+        //printf(":%s\n", buf);
+        i = 14;
     }
+    if(i==14)
+    printf("Waiting for data...\n");
+    while (TIMERVAR== FALSE && timeout_seconds > 0 && i==14)
+    {
+        res = read(fd, buf + i, 1);
+
+        if (res > 0)
+        {
+            // Data received
+            // Process the received data as needed
+            TIMERVAR=TRUE;
+        }
+        else if (res == 0)
+        {
+            // No data received, wait for a specified duration
+            usleep(timeout_microseconds);
+            timeout_seconds--;
+        }
+        else
+        {
+            // Error occurred while reading data
+            perror("read");
+            break;
+        }
     }
+    TIMERVAR=FALSE;
+    if(i>13 && i<19){
+        if(i>14) 
+        res = read(fd,buf+i,1);
+    if (res>0){ 
+        if(buf[i] == F)
+        i++;
+ 
+        else if(buf[i] == A)
+        i++;
+
+        else if(buf[i] == C_RR0)
+        i++;
+
+        else if(buf[i] == C_SET^A)
+        i++;
+
+        else  if(buf[i] == F)
+        i++;
+
+        else
+        STOP=TRUE;  
+
+    }
+    else
+    STOP=TRUE;  
+    }
+    if(i==19){
+        printf("----------------Trama RR detetada------------------\n"); 
+        STOP=TRUE;
+    }
+
+    
+
+
+}
 
 
 
