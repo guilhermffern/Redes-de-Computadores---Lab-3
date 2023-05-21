@@ -25,7 +25,8 @@
 #define C_I0     0x00
 #define C_I1     0xB0
 #define C_DISC   0x0B
-
+int typeI=1;
+int RR;
 volatile int STOP=FALSE;
 volatile int TIMERVAR=FALSE;
 int timeout_seconds = 5;
@@ -118,9 +119,22 @@ int main(int argc, char** argv)
         else if (res == 0)
         {
             // No data received, wait for a specified duration
+            {
+            buf[0] = 0x5c;
+            buf[1] = 0x01;
+            buf[2] = 0x04;
+            buf[3] = 0x02;
+            buf[4] = 0x5c;
+            res = 5;
+        
+            res = write(fd,buf,5);
+            printf("----------------Trama SET reenviada----------------\n");
             usleep(timeout_microseconds);
-            timeout_seconds--;
-        }
+            //timeout_seconds--;
+            }
+                    usleep(timeout_microseconds);
+                    timeout_seconds--;
+         }
         else
         {
             // Error occurred while reading data
@@ -129,7 +143,9 @@ int main(int argc, char** argv)
         }
     }
     TIMERVAR = FALSE;
-    while(STOP==FALSE){    
+
+
+while(STOP==FALSE){    
     if(i>4 && i<11){
         if(i>5) 
         res = read(fd,buf+i,1);
@@ -147,11 +163,14 @@ int main(int argc, char** argv)
         i++;
        else if (buf[i]==0x5c)
         i++;
-        else
-            STOP = TRUE;
     }
-    else
-    STOP=TRUE;  
+    else if(res<1){
+    //STOP=TRUE;  
+    printf("----------------ERROR----------------\n");
+    usleep(timeout_microseconds);
+    i=5;
+     res = read(fd, buf + i, 1);
+    }
     }
    if(i==10)
     {
@@ -159,12 +178,19 @@ int main(int argc, char** argv)
         //printf(":%s\n", buf);
         buf[10] = F;
         buf[11] = A;
+        if(typeI==0)
         buf[12] = C_I0;
+        if(typeI==1)
+        buf[12] = C_I1;
         //buf[12] = C_I1;
         buf[13] = C_SET^A;
         //NOW ITS DATA//
         res = write(fd,buf+i,4);//Usar variavel global que incrementa com os dados enviados para dizer o nº de carateres que irao ser escritos
         //printf(":%s\n", buf);
+        if(typeI==0)
+        printf("----------------Trama I0 enviada-----------------\n");
+        if(typeI==1)
+        printf("----------------Trama I1 enviada-----------------\n");
         i = 14;
     }
     if(i==14)
@@ -182,8 +208,17 @@ int main(int argc, char** argv)
         else if (res == 0)
         {
             // No data received, wait for a specified duration
-            usleep(timeout_microseconds);
+            usleep(2*timeout_microseconds);
             timeout_seconds--;
+            /*    buf[10] = F;
+                buf[11] = A;
+                buf[12] = C_I0;
+                //buf[12] = C_I1;
+                buf[13] = C_SET^A;
+                //NOW ITS DATA//
+                //res = write(fd,buf+i,4);//Usar variavel global que incrementa com os dados enviados para dizer o nº de carateres que irao ser escritos
+                //printf(":%s\n", buf);
+                printf("----------------Trama I enviada-----------------\n");*/
         }
         else
         {
@@ -203,8 +238,15 @@ int main(int argc, char** argv)
         else if(buf[i] == A)
         i++;
 
-        else if(buf[i] == C_RR0)
+        else if(buf[i] == C_RR0){
         i++;
+        RR = 0;
+        }
+
+        else if(buf[i] == C_RR1){
+        i++;
+        RR = 1;
+        }
 
         else if(buf[i] == C_SET^A)
         i++;
@@ -220,7 +262,10 @@ int main(int argc, char** argv)
     STOP=TRUE;  
     }
     if(i==19){
-        printf("----------------Trama RR detetada------------------\n"); 
+        if(RR==0)
+        printf("----------------Trama RR0 detetada------------------\n"); 
+        if(RR==1)
+        printf("----------------Trama RR1 detetada------------------\n"); 
         STOP=TRUE;
     }
 

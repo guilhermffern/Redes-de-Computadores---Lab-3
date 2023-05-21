@@ -26,7 +26,7 @@
 #define C_DISC   0x0B
 volatile int STOP=FALSE;
 volatile int TIMERVAR = FALSE;
-
+int RR;
 int main(int argc, char** argv)
 {
     int fd,c, res;
@@ -126,15 +126,21 @@ int main(int argc, char** argv)
         i++;
        else if(buf[i] == 0x01)
         i++;
-       else if(buf[i] == 0x03)
+       else if(buf[i] == 0x04)
         i++;
        else if(buf[i] == 0x02)
         i++;
        else if(buf[i] == 0x5c)
         i++;
     }
-    else if(res<1)
-    STOP=TRUE;  
+    else if(res<1){
+    //STOP=TRUE;  
+    printf("----------------ERROR----------------\n");
+                usleep(timeout_microseconds);
+
+    i=0;
+     res = read(fd, buf + i, 1);
+    }
     }
 
     if(i==5){
@@ -194,9 +200,15 @@ int main(int argc, char** argv)
        else if(buf[i] == A)
         i++;
 
-       else if(buf[i] == C_I0)
+       else if(buf[12] == C_I0){
         i++;
+        RR = 0;
+        }
 
+        else if(buf[i] == C_I1){
+        i++;
+        RR = 1;
+        }
        else if(buf[i] == C_SET^A)
         i++;
 
@@ -205,15 +217,23 @@ int main(int argc, char** argv)
     STOP=TRUE;  
     }
     if(i>=14){
-        printf("----------------Trama I detetada------------------\n");
+        if(RR==0)
+        printf("----------------Trama I0 detetada------------------\n");
+        if(RR==1)
+        printf("----------------Trama I1 detetada------------------\n");
         buf[14] = F;
         buf[15] = A;
+        if(RR==0)
         buf[16] = C_RR0;
-        //buf[16] = C_RR1;
+        if(RR==1)
+        buf[16] = C_RR1;
         buf[17] = C_SET^A;
         buf[18] = F;
         res = write(fd,buf+i,5);//Usar variavel global que incrementa com os dados enviados para dizer o nº de carateres que irao ser escritos
-        printf("----------------Trama RR enviada----------------\n");
+        if(RR==0)
+        printf("----------------Trama RR0 enviada----------------\n");
+        if(RR==1)
+        printf("----------------Trama RR1 enviada----------------\n");
         STOP=TRUE;
     }
 
