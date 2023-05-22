@@ -11,22 +11,299 @@
 #define FALSE 0
 #define TRUE 1
 
-#define F        0x7E
-#define ESC      0x7D
-#define A        0x03
-#define A_DISC   0x01
-#define C_SET    0x03
-#define C_UA     0x07
-#define C_RR0    0x05
-#define C_RR1    0xB5
-#define C_REJ0   0x01
-#define C_REJ1   0x81
-#define C_I0     0x00
-#define C_I1     0xB0
-#define C_DISC   0x0B
+#define F 0x5c
+#define A 0x03
+#define ALT_A 0x01
+#define C_SET 0x03
+#define C_UA 0x07
+#define C_NS_0 0x00
+#define C_NS_1 0x02
+#define C_RR_0 0x01
+#define C_RR_1 0x21
+#define C_REJ_0 0x05
+#define C_REJ_1 0x25
+#define C_DISC 0x0B
 volatile int STOP=FALSE;
 volatile int TIMERVAR = FALSE;
-int RR;
+int RRX = 0;
+int RRX_Read = 0;
+
+
+void readSET(int fd);
+void writeUA(int fd);
+void writeRR(int fd);
+void readRR(int fd);
+void writeDISC(int fd);
+void readDISC(int fd);
+
+typedef enum{
+    Init,
+    StateF,
+    StateA,
+    C,
+    BCC,
+    Other,
+    Stop
+} frameStates;
+
+frameStates frameState = Init;
+
+int SMFlag = 0;
+
+char buf[255], SET[5], UA[5],RR[5],DISC[5];
+
+void readSET(int fd){
+    int res;
+    while(STOP==FALSE){
+    res = read(fd,buf,1);
+
+    switch(frameState){
+        case Init:
+            if(buf[0]==F)
+                frameState=StateF;
+        
+        case StateF:
+            if(buf[0]==F)
+                frameState=StateF;
+
+            else if(buf[0]==A || buf[0]==ALT_A)
+                frameState = StateA;
+            
+            else{
+                frameState = Init;
+                SMFlag = 0;
+            }
+            break;
+        
+        case StateA:
+            if(buf[0]==F)
+                frameState=StateF;
+
+            else if(buf[0]==C_SET)
+                frameState = C;
+            
+            else{   
+                frameState = Init;
+                SMFlag = 0;
+            }
+            break;            
+
+        case C:
+            if(buf[0]==F)
+                frameState=StateF;
+
+            else if(buf[0]==A^C_SET||buf[0]==ALT_A^C_SET)
+                frameState = BCC;
+            
+            else{
+                frameState = Init;
+                SMFlag = 0;
+            }
+            break;
+    }
+        if(buf[0]==F && SMFlag == 1)
+            STOP = TRUE;
+
+        if(buf[0] == F)
+            SMFlag = 1;
+
+}
+SMFlag = 0;
+printf("trama SET recebida\n");
+STOP = FALSE;
+}
+
+void writeUA(int fd){
+    int res;
+    UA[0] = F;   
+    UA[1] = A;      
+    UA[2] = C_UA;     
+    UA[3] = C_UA^A;  
+    UA[4] = F;    
+    res = write(fd,UA,5);
+    printf("trama UA enviada");
+}
+
+void writeRR(int fd){
+    int i, res;
+    printf("--- Sending RR ---\n");
+    RR[0] = F;  
+    RR[1] = A;   
+    if (RRX == 0){   
+        RR[2] = C_RR_1;       
+        RRX = 1;
+    }
+    else{
+        RR[2] = C_RR_0;
+        RRX = 0;
+    }
+    RR[3] = RR[2]^A; 
+    RR[4] = F;   
+    res = write(fd,RR,5);
+}
+
+void readRR (int fd){
+    char C_RR;
+    int res;
+
+    if(RRX_Read==0)
+        C_RR = C_RR_1;
+    else
+        C_RR = C_RR_0;
+
+
+    while (STOP == FALSE) {     
+        res = read(fd,buf,1);       
+        switch(frameState){
+
+            case Init:
+                if (buf[0] == F)
+                    frameState = StateF;
+                break;
+
+            case StateF:
+                if (buf[0] == F){
+                    frameState = StateF;
+                    SMFlag = 0;
+                }
+                else if (buf[0] == A || buf[0] == ALT_A)
+                    frameState = StateA;
+                
+                else{
+                    frameState = Init;          
+                    SMFlag = 0;
+                }
+                break;
+
+            case StateA:
+                if (buf[0] == F)
+                    frameState = StateF;
+                
+                else if (buf[0] == C_RR)
+                    frameState = C;
+                
+                else{
+                    frameState = Init; 
+                    SMFlag = 0;
+                }
+                break;  
+
+            case C:
+                if (buf[0] == F){
+                    frameState = StateF;
+                    SMFlag = 0;
+                }
+                else if (buf[0] == A^C_RR || buf[0] == ALT_A^C_RR){
+                    frameState = BCC;
+                    STOP = TRUE;
+                }
+                else{
+                    frameState = Init;
+                    SMFlag = 0;
+                }
+                break;
+            
+            case BCC:
+                frameState = Init;
+                break;
+        } 
+        
+        if (buf[0] == F && SMFlag == 1)
+            STOP = TRUE;
+        
+        if(buf[0] == F)
+            SMFlag = 1;
+    } 
+    STOP = FALSE;
+    SMFlag = 0;
+    if(RRX_Read == 0)
+        RRX_Read = 1;
+    else 
+        RRX_Read = 0;
+}
+
+void readDISC (int fd){
+    int res;
+     while (STOP == FALSE) {    
+        res = read(fd,buf,1);
+        switch(frameState){
+
+            case Init:
+                if (buf[0] == F)
+                    frameState = StateF;
+                break;
+
+            case StateF:
+                if (buf[0] == F){
+                    frameState = StateF;
+                    SMFlag = 0;
+                }
+                else if (buf[0] == A || buf[0] == ALT_A)
+                    frameState = StateA;
+                
+                else{
+                    frameState = Init; 
+                    SMFlag = 0;
+                }
+                break;
+
+            case StateA:
+                if (buf[0] == F)
+                    frameState = StateF;
+                
+                else if (buf[0] == C_DISC)
+                    frameState = C;
+                
+                else{
+                    frameState = Init; 
+                    SMFlag = 0;
+                }
+                break;  
+
+            case C:
+                if (buf[0] == F){
+                    frameState = StateF;
+                    SMFlag = 0;
+                }
+                else if (buf[0] == A^C_DISC || buf[0] == ALT_A^C_DISC){
+                    frameState = BCC;
+                    STOP = TRUE;
+                }
+                else{
+                    frameState = Init;
+                    SMFlag = 0;
+                }
+                break;
+            
+            case BCC:
+                frameState = Init;                
+                break;
+        } 
+        
+        if (buf[0] == F && SMFlag == 1)
+            STOP = TRUE;
+        
+        if(buf[0] == F)
+            SMFlag = 1;
+    } 
+    STOP = FALSE;
+    SMFlag = 0;
+}
+
+void writeDISC (int fd){
+    int res;
+    DISC[0] = F;
+    DISC[1] = A;
+    DISC[2] = C_DISC;
+    DISC[3] = C_DISC^A;
+    DISC[4] = F;
+    res = write(fd,DISC,5);
+}
+
+
+
+
+
 int main(int argc, char** argv)
 {
     int fd,c, res;
@@ -80,7 +357,7 @@ int main(int argc, char** argv)
         perror("tcsetattr");
         exit(-1);
     }
-    int i = 0;
+   /* int i = 0;
 
     int timeout_seconds = 5;  // Adjust the timeout duration as needed
     int timeout_microseconds = 1000000;
@@ -242,6 +519,91 @@ int main(int argc, char** argv)
     /*
     O ciclo WHILE deve ser alterado de modo a respeitar o indicado no guião
     */
+       int timeout_seconds = 5;  // Adjust the timeout duration as needed
+    int timeout_microseconds = 1000000;
+
+    printf("Waiting for data...\n");
+    
+    // Wait for data or timeout
+       while (TIMERVAR == FALSE && timeout_seconds > 0)
+    {
+        res = read(fd, buf, 1);
+
+        if (res > 0)
+        {
+            // Data received
+            // Process the received data as needed
+            TIMERVAR=TRUE;
+        }
+        else if (res == 0)
+        {
+            // No data received, wait for a specified duration
+            usleep(timeout_microseconds);
+            timeout_seconds--;
+        }
+        else
+        {
+            // Error occurred while reading data
+            perror("read");
+            break;
+        }
+    }
+    TIMERVAR=FALSE;
+           while (TIMERVAR == FALSE && timeout_seconds > 0)
+    {
+        res = read(fd, buf, 1);
+
+        if (res > 0)
+        {
+            // Data received
+            // Process the received data as needed
+            TIMERVAR=TRUE;
+        }
+        else if (res == 0)
+        {
+            // No data received, wait for a specified duration
+            usleep(timeout_microseconds);
+            timeout_seconds--;
+        }
+        else
+        {
+            // Error occurred while reading data
+            perror("read");
+            break;
+        }
+    }
+    TIMERVAR=FALSE;
+    readSET(fd);
+    writeUA(fd);
+    usleep(timeout_microseconds);
+    writeRR(fd);
+           while (TIMERVAR == FALSE && timeout_seconds > 0)
+    {
+        res = read(fd, buf, 1);
+
+        if (res > 0)
+        {
+            // Data received
+            // Process the received data as needed
+            TIMERVAR=TRUE;
+        }
+        else if (res == 0)
+        {
+            // No data received, wait for a specified duration
+            usleep(timeout_microseconds);
+            timeout_seconds--;
+        }
+        else
+        {
+            // Error occurred while reading data
+            perror("read");
+            break;
+        }
+    }
+    TIMERVAR=FALSE;
+    readDISC(fd);
+    writeDISC(fd);
+    printf("Iam finished\n\n");
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);
