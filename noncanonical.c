@@ -5,6 +5,10 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
 
 #define BAUDRATE B38400
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
@@ -27,8 +31,9 @@ volatile int STOP=FALSE;
 volatile int TIMERVAR = FALSE;
 int RRX = 0;
 int RRX_Read = 0;
+int resendSize, alarmeMax=5, alarmeTime=3, alarmeCounter = 0;
 
-
+void alarme();
 void readSET(int fd);
 void writeUA(int fd);
 void writeRR(int fd);
@@ -50,7 +55,22 @@ frameStates frameState = Init;
 
 int SMFlag = 0;
 
-char buf[255], SET[5], UA[5],RR[5],DISC[5];
+char resend[255], buf[255], SET[5], UA[5],RR[5],DISC[5];
+
+void alarme(){ /* picks up alarm */
+    int res, i;
+    printf("Retrying connection in %d seconds...\n", alarmeTime);
+   
+    res = write(fd,resend,resendSize);
+    printf("%d bytes written\n", res);
+    alarmeCounter++;
+    if (alarmeCounter == alarmeMax){
+        printf("## WARNING: Reached max (%d) retries. ## \nExiting...\n", alarmMax);
+        exit(1);
+    }
+    
+    alarm(alarmeTime);
+}
 
 void readSET(int fd){
     int res;
@@ -300,10 +320,6 @@ void writeDISC (int fd){
     res = write(fd,DISC,5);
 }
 
-
-
-
-
 int main(int argc, char** argv)
 {
     int fd,c, res;
@@ -519,13 +535,13 @@ int main(int argc, char** argv)
     /*
     O ciclo WHILE deve ser alterado de modo a respeitar o indicado no guião
     */
-       int timeout_seconds = 5;  // Adjust the timeout duration as needed
+    int timeout_seconds = 5;  // Adjust the timeout duration as needed
     int timeout_microseconds = 1000000;
 
     printf("Waiting for data...\n");
     
     // Wait for data or timeout
-       while (TIMERVAR == FALSE && timeout_seconds > 0)
+    while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
         res = read(fd, buf, 1);
 
@@ -549,7 +565,7 @@ int main(int argc, char** argv)
         }
     }
     TIMERVAR=FALSE;
-           while (TIMERVAR == FALSE && timeout_seconds > 0)
+    while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
         res = read(fd, buf, 1);
 
@@ -577,7 +593,7 @@ int main(int argc, char** argv)
     writeUA(fd);
     usleep(timeout_microseconds);
     writeRR(fd);
-           while (TIMERVAR == FALSE && timeout_seconds > 0)
+    while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
         res = read(fd, buf, 1);
 
@@ -604,6 +620,8 @@ int main(int argc, char** argv)
     readDISC(fd);
     writeDISC(fd);
     printf("Iam finished\n\n");
+    alarm(0);
+    alarmeCounter = 0;
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);

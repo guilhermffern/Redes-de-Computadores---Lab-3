@@ -5,6 +5,10 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS0"
@@ -24,18 +28,24 @@
 #define C_REJ_0 0x05
 #define C_REJ_1 0x25
 #define C_DISC 0x0B
+
+int fd;
 int typeI=0;
 int RRX_Read;
 volatile int STOP=FALSE;
 volatile int TIMERVAR=FALSE;
 int timeout_seconds = 5;
 int timeout_microseconds = 1000000;
+int resendSize, alarmeMax=5, alarmeTime=3, alarmeCounter = 0;
+
 
 void writeSET(int fd);
 void readUA(int fd);
 void readRR(int fd);
 void writeDISC(int fd);
 void readDISC(int fd);
+void alarme();
+
 typedef enum{
     Init,
     StateF,
@@ -46,13 +56,29 @@ typedef enum{
     Stop
 } frameStates;
 
+struct termios oldtio,newtio;
 frameStates frameState = Init;
 
 int SMFlag = 0;
 
-char buf[255], SET[5], UA[5],RR[5],DISC[5];
+char  resend[255], buf[255], SET[5], UA[5],RR[5],DISC[5];
 
-void writeSET (int fd){
+void alarme(){ /* picks up alarm */
+    int res, i;
+    printf("Retrying connection in %d seconds...\n", alarmeTime);
+   
+    res = write(fd,resend,resendSize);
+    printf("%d bytes written\n", res);
+    alarmeCounter++;
+    if (alarmeCounter == alarmeMax){
+        printf("## WARNING: Reached max (%d) retries. ## \nExiting...\n", alarmMax);
+        exit(1);
+    }
+    
+    alarm(alarmeTime);
+}
+
+void writeSET(int fd){
     int res;
     SET[0] = F;    
     SET[1] = A;       
@@ -64,7 +90,7 @@ void writeSET (int fd){
 
 void readUA (int fd){
     int res;
-while (STOP == FALSE) {         
+    while (STOP == FALSE) {         
         res = read(fd,buf,1);            
 
         switch(frameState){
@@ -213,7 +239,7 @@ void readRR (int fd){
 }
 
 void writeDISC (int fd){
-        int res;
+    int res;
     DISC[0] = F;
     DISC[1] = A;
     DISC[2] = C_DISC;
@@ -292,11 +318,11 @@ void readDISC (int fd){
 
 int main(int argc, char** argv)
 {
-    int fd,c, res;
+    int fd, res; //c,
     struct termios oldtio,newtio;
     unsigned char buf[255];
-    int i, sum = 0, speed = 0;
-
+    int i;// sum = 0, speed = 0;
+    (void) signal(SIGALRM, alarme);
     if ( (argc < 2) ||
          ((strcmp("/dev/ttyS0", argv[1])!=0) &&
           (strcmp("/dev/ttyS1", argv[1])!=0) &&
@@ -544,8 +570,8 @@ while(STOP==FALSE){
     o indicado no guião
     */
 
-   writeSET (fd);
-       while (TIMERVAR == FALSE && timeout_seconds > 0)
+    writeSET (fd);
+    while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
         res = read(fd, buf, 1);
 
@@ -569,8 +595,8 @@ while(STOP==FALSE){
         }
     }
     TIMERVAR=FALSE;
-   readUA(fd);
-       while (TIMERVAR == FALSE && timeout_seconds > 0)
+    readUA(fd);
+    while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
         res = read(fd, buf, 1);
 
@@ -594,9 +620,9 @@ while(STOP==FALSE){
         }
     }
     TIMERVAR=FALSE;
-   readRR (fd);
-   writeDISC (fd);
-       while (TIMERVAR == FALSE && timeout_seconds > 0)
+    readRR (fd);
+    writeDISC (fd);
+    while (TIMERVAR == FALSE && timeout_seconds > 0)
     {
         res = read(fd, buf, 1);
 
@@ -620,11 +646,12 @@ while(STOP==FALSE){
         }
     }
     TIMERVAR=FALSE;
-   readDISC(fd);
+    readDISC(fd);
+    alarm(0);
+    alarmeCounter = 0;
+    sleep(1);
 
-
-
-    if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
+    if (tcsetattr(fd,TCSANOW,&oldtio) == -1) {
         perror("tcsetattr");
         exit(-1);
     }
